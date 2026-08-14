@@ -1,0 +1,272 @@
+{
+  "project_id": "2948762d-b913-4fed-a4b2-e91ec2bd350e",
+  "components": [
+    {
+      "id": "webhook_1",
+      "provider": "webhook",
+      "name": "Webhook",
+      "config": {
+        "hideForm": true,
+        "mode": "Source",
+        "parameters": {},
+        "type": "webhook",
+        "name": "Webhook"
+      },
+      "ui": {
+        "position": {
+          "x": 1410,
+          "y": 590
+        },
+        "nodeType": "default",
+        "formDataValid": true
+      }
+    },
+    {
+      "id": "image_vision_ollama_1",
+      "provider": "image_vision_ollama",
+      "name": "Ollama Vision",
+      "config": {
+        "profile": "custom",
+        "custom": {
+          "serverbase": "http://localhost:11434/v1",
+          "model": "llava:latest",
+          "modelTotalTokens": 4096,
+          "systemPrompt": "You are a strictly literal, factual insurance damage assessor. Examine this image strictly based on what is visibly proven. DO NOT guess how the accident happened. DO NOT assume the orientation of the vehicle (e.g., do not say it is on its side if it is upright). Describe the exact visible damage and severity.",
+          "prompt": "List the visibly damaged parts in detail. Be extremely literal. State if the vehicle is upright. Do not hallucinate missing parts or rollover damage unless explicitly visible."
+        },
+        "name": "Ollama Vision",
+        "parameters": {
+          "google": {}
+        }
+      },
+      "ui": {
+        "position": {
+          "x": 1500,
+          "y": 410
+        },
+        "nodeType": "default",
+        "formDataValid": true
+      },
+      "input": [
+        {
+          "lane": "image",
+          "from": "webhook_1"
+        }
+      ]
+    },
+    {
+      "id": "ner_1",
+      "provider": "ner",
+      "name": "Named Entity Recognition",
+      "config": {
+        "profile": "bertLarge",
+        "bertLarge": {
+          "aggregation_strategy": "simple",
+          "min_confidence": 0.9,
+          "store_in_metadata": true
+        },
+        "name": "Named Entity Recognition"
+      },
+      "ui": {
+        "position": {
+          "x": 1740,
+          "y": 360
+        },
+        "nodeType": "default",
+        "formDataValid": true
+      },
+      "input": [
+        {
+          "lane": "text",
+          "from": "image_vision_ollama_1"
+        },
+        {
+          "lane": "text",
+          "from": "webhook_1"
+        }
+      ]
+    },
+    {
+      "id": "anonymize_text_1",
+      "provider": "anonymize_text",
+      "name": "Anonymize",
+      "config": {
+        "profile": "glinerMergedLarge",
+        "glinerMergedLarge": {
+          "anonymizeChar": "█"
+        },
+        "name": "Anonymize"
+      },
+      "ui": {
+        "position": {
+          "x": 1950,
+          "y": 440
+        },
+        "nodeType": "default",
+        "formDataValid": true
+      },
+      "input": [
+        {
+          "lane": "text",
+          "from": "ner_1"
+        }
+      ]
+    },
+    {
+      "id": "question_1",
+      "provider": "question",
+      "name": "Question",
+      "config": {
+        "type": "question",
+        "name": "Question"
+      },
+      "ui": {
+        "position": {
+          "x": 1950,
+          "y": 700
+        },
+        "nodeType": "default",
+        "formDataValid": true
+      },
+      "input": [
+        {
+          "lane": "text",
+          "from": "anonymize_text_1"
+        }
+      ]
+    },
+    {
+      "id": "agent_rocketride_1",
+      "provider": "agent_rocketride",
+      "name": "RocketRide Wave",
+      "config": {
+        "agent_description": "You are an expert AI insurance claim intake assessor. Analyze accident descriptions and visual assessments to produce structured claim reports.",
+        "instructions": [
+          "Analyze this vehicle damage report. Respond with ONLY a valid JSON object, no markdown, no explanation, no preamble. Use this exact schema:\nAnalyze this vehicle damage report. Respond with ONLY a valid JSON object, no markdown, no explanation, no preamble. Only describe damage you can clearly see in the image. Do not infer or assume damage that is not visible. If something is unclear, say \"unable to confirm from photo.\"Use this exact schema:\n{\"summary\": \"A detailed 3-5 sentence description including: what type of collision occurred, which areas of the vehicle are damaged, the visible extent of damage (crushed, cracked, dented, scratched), any visible safety concerns (fluid leaks, deployed airbags, broken glass), and whether the vehicle appears structurally compromised\", \"severity\": \"Low|Moderate|Severe|Totaled\", \"damaged_parts\": [\"...\"], \"estimated_cost_range\": \"$X - $Y\", \"safety_hazards\": [\"...\"], \"drivable\": true/false}"
+        ],
+        "max_waves": 2,
+        "name": "RocketRide Wave",
+        "parameters": {
+          "google": {}
+        }
+      },
+      "ui": {
+        "position": {
+          "x": 2200,
+          "y": 470
+        },
+        "nodeType": "default",
+        "formDataValid": true
+      },
+      "input": [
+        {
+          "lane": "questions",
+          "from": "question_1"
+        }
+      ]
+    },
+    {
+      "id": "llm_ollama_1",
+      "provider": "llm_ollama",
+      "name": "Ollama",
+      "config": {
+        "profile": "custom",
+        "custom": {
+          "serverbase": "http://localhost:11434/v1",
+          "model": "qwen2.5:7b",
+          "modelTotalTokens": 4096,
+          "temperature": 0.1
+        },
+        "name": "Ollama",
+        "parameters": {
+          "google": {}
+        }
+      },
+      "ui": {
+        "position": {
+          "x": 2180,
+          "y": 710
+        },
+        "nodeType": "default",
+        "formDataValid": false
+      },
+      "control": [
+        {
+          "classType": "llm",
+          "from": "agent_rocketride_1"
+        }
+      ]
+    },
+    {
+      "id": "response_answers_1",
+      "provider": "response_answers",
+      "name": "Return Answers",
+      "config": {
+        "laneName": "answers",
+        "name": "Return Answers"
+      },
+      "ui": {
+        "position": {
+          "x": 2410,
+          "y": 720
+        },
+        "nodeType": "default",
+        "formDataValid": true
+      },
+      "input": [
+        {
+          "lane": "answers",
+          "from": "agent_rocketride_1"
+        }
+      ]
+    },
+    {
+      "id": "response_documents_1",
+      "provider": "response_documents",
+      "name": "Return Documents",
+      "config": {
+        "laneName": "documents",
+        "name": "Return Documents"
+      },
+      "ui": {
+        "position": {
+          "x": 2460,
+          "y": 560
+        },
+        "nodeType": "default",
+        "formDataValid": true
+      }
+    },
+    {
+      "id": "memory_internal_1",
+      "provider": "memory_internal",
+      "name": "Memory (Internal)",
+      "config": {
+        "type": "memory_internal",
+        "name": "Memory (Internal)"
+      },
+      "ui": {
+        "position": {
+          "x": 2240,
+          "y": 640
+        },
+        "nodeType": "default",
+        "formDataValid": true
+      },
+      "control": [
+        {
+          "classType": "memory",
+          "from": "agent_rocketride_1"
+        }
+      ]
+    }
+  ],
+  "version": 1,
+  "docRevision": 120,
+  "isLocked": false,
+  "snapToGrid": true,
+  "snapGridSize": [
+    10,
+    10
+  ]
+}

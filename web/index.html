@@ -1,0 +1,535 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ClaimDesk — Insurance Claim Intake</title>
+<!-- PDF Generator Library -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+<style>
+  :root {
+    --bg: #0f1115;
+    --panel: #181b22;
+    --panel-2: #1f2330;
+    --border: #2a2f3d;
+    --text: #e7e9ee;
+    --muted: #9aa0ad;
+    --accent: #4f8cff;
+    --accent-2: #3a6fd8;
+    --ok: #2ecc71;
+    --warn: #f5a623;
+    --err: #ff5c5c;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.5;
+  }
+  header {
+    padding: 22px 28px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+  header .logo {
+    width: 30px; height: 30px; border-radius: 8px;
+    background: linear-gradient(135deg, var(--accent), #8a5cff);
+    display: grid; place-items: center; font-weight: 700; font-size: 15px;
+  }
+  header h1 { font-size: 17px; margin: 0; font-weight: 600; }
+  header span.sub { color: var(--muted); font-size: 13px; margin-left: 4px; }
+  .wrap {
+    max-width: 1100px; margin: 0 auto; padding: 28px;
+    display: grid; grid-template-columns: 1fr 1fr; gap: 24px;
+  }
+  @media (max-width: 860px) { .wrap { grid-template-columns: 1fr; } }
+  .card {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 22px;
+  }
+  .card h2 { margin: 0 0 4px; font-size: 15px; font-weight: 600; }
+  .card p.hint { margin: 0 0 18px; color: var(--muted); font-size: 13px; }
+  label { display: block; font-size: 13px; color: var(--muted); margin: 16px 0 6px; }
+  textarea, input[type="text"] {
+    width: 100%; background: var(--panel-2); border: 1px solid var(--border);
+    color: var(--text); border-radius: 10px; padding: 11px 13px; font-size: 14px;
+    font-family: inherit; resize: vertical;
+  }
+  textarea:focus, input:focus { outline: none; border-color: var(--accent); }
+  .dropzone {
+    border: 1.5px dashed var(--border); border-radius: 12px; padding: 26px;
+    text-align: center; color: var(--muted); cursor: pointer; transition: .15s;
+    background: var(--panel-2);
+  }
+  .dropzone.drag { border-color: var(--accent); color: var(--text); background: #202638; }
+  .thumbs { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 14px; }
+  .thumb {
+    position: relative; width: 84px; height: 84px; border-radius: 10px;
+    overflow: hidden; border: 1px solid var(--border); background: #000;
+  }
+  .thumb img { width: 100%; height: 100%; object-fit: cover; }
+  .thumb button {
+    position: absolute; top: 3px; right: 3px; width: 18px; height: 18px;
+    border: none; border-radius: 50%; background: rgba(0,0,0,.65); color: #fff;
+    cursor: pointer; font-size: 12px; line-height: 1; display: grid; place-items: center;
+  }
+  .btn {
+    margin-top: 20px; width: 100%; padding: 12px; border: none; border-radius: 10px;
+    background: var(--accent); color: #fff; font-size: 14px; font-weight: 600; cursor: pointer;
+    transition: .15s;
+  }
+  .btn:hover { background: var(--accent-2); }
+  .btn:disabled { opacity: .55; cursor: not-allowed; }
+  .result { min-height: 200px; }
+  .result .placeholder { color: var(--muted); font-size: 14px; text-align: center; padding: 60px 20px; }
+  .status { font-size: 13px; margin-bottom: 14px; display: flex; align-items: center; gap: 8px; }
+  .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); }
+  .dot.run { background: var(--warn); animation: pulse 1s infinite; }
+  .dot.ok { background: var(--ok); }
+  .dot.err { background: var(--err); }
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.3} }
+  pre.report {
+    white-space: pre-wrap; word-break: break-word; font-family: ui-monospace, "SF Mono", Menlo, monospace;
+    font-size: 13px; background: var(--panel-2); border: 1px solid var(--border);
+    border-radius: 10px; padding: 16px; margin: 0; color: var(--text);
+  }
+  .steps { display: flex; flex-direction: column; gap: 8px; margin-bottom: 16px; }
+  .step { font-size: 13px; color: var(--muted); display: flex; align-items: center; gap: 8px; }
+  .step .s-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--border); }
+  .step.active { color: var(--text); }
+  .step.active .s-dot { background: var(--accent); }
+  .step.done .s-dot { background: var(--ok); }
+  .config {
+    max-width: 1100px; margin: 0 auto; padding: 0 28px 8px;
+  }
+  
+  /* NEW TAB UI STYLES */
+  .tabs { display: flex; gap: 8px; margin-bottom: 16px; border-bottom: 1px solid var(--border); padding-bottom: 12px; overflow-x: auto; }
+  .tab-btn { background: transparent; border: 1px solid var(--border); color: var(--muted); padding: 6px 14px; border-radius: 20px; cursor: pointer; font-size: 13px; transition: .2s; white-space: nowrap; }
+  .tab-btn:hover { border-color: var(--accent); color: var(--text); }
+  .tab-btn.active { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 600; }
+  .tab-content { display: none; }
+  .tab-content.active { display: block; }
+  .export-bar { display: flex; justify-content: flex-end; margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--border); gap: 10px; }
+  .btn-sm { padding: 8px 14px; font-size: 13px; font-weight: 600; background: var(--panel-2); border: 1px solid var(--border); color: var(--text); border-radius: 8px; cursor: pointer; transition: .15s; }
+  .btn-sm:hover { border-color: var(--accent); background: #202638; }
+  
+  @media print {
+    body { background: #fff !important; color: #000 !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    /* Hide the form, headers, buttons, and tabs */
+    header, .config, .card:not(.result), .tabs, .export-bar, button { display: none !important; }
+    .wrap { display: block !important; padding: 0 !important; }
+    .card.result { border: none !important; background: transparent !important; padding: 0 !important; box-shadow: none !important; }
+    /* Force all hidden tabs to show up in the PDF */
+    .tab-content { display: block !important; page-break-inside: avoid; margin-bottom: 30px; border-bottom: 2px solid #eee; padding-bottom: 20px; }
+    /* Override dark mode colors for a clean white PDF */
+    div[style*="background:var(--panel-2)"] { background: #f9f9f9 !important; border: 1px solid #ddd !important; }
+    div[style*="background:var(--panel)"] { background: #fff !important; border: 1px solid #ddd !important; }
+    div[style*="background:#2a1818"] { background: #fff5f5 !important; color: #c0392b !important; }
+    span, p, strong, div { color: #333 !important; }
+  }
+</style>
+</head>
+<body>
+<header>
+  <div class="logo">C</div>
+  <h1>ClaimDesk</h1>
+  <span class="sub">AI-assisted insurance claim intake</span>
+</header>
+
+<div class="config">
+  <div id="conn-banner" style="background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:12px 16px;font-size:13px;color:var(--muted);display:flex;align-items:center;gap:8px;">
+    <span class="dot" id="conn-dot"></span>
+    <span id="conn-text">Checking pipeline connection…</span>
+  </div>
+</div>
+
+<div class="wrap">
+  <!-- LEFT: intake form -->
+  <div class="card">
+    <h2>New claim</h2>
+    <p class="hint">Upload multiple photos of the damage, then describe what happened.</p>
+
+    <label>Damage & document photos</label>
+    <div class="dropzone" id="dropzone">
+      <div>Drag &amp; drop images here, or <strong>click to browse</strong></div>
+      <input type="file" id="file-input" accept="image/*" multiple hidden>
+    </div>
+    <div class="thumbs" id="thumbs"></div>
+
+    <label>Accident description</label>
+    <textarea id="description" rows="5" placeholder="e.g. Rear-ended at a stoplight on Meridian St around 3pm..."></textarea>
+
+    <label>Policy number (optional)</label>
+    <input type="text" id="policy" placeholder="e.g. POL-4821-99">
+
+    <button class="btn" id="submit">Process claim</button>
+  </div>
+
+  <!-- RIGHT: result -->
+  <div class="card result">
+    <h2>Claim report</h2>
+    <p class="hint">The pipeline's assessment will appear here.</p>
+
+    <div class="steps" id="steps" style="display:none">
+      <div class="step" data-step="upload"><span class="s-dot"></span> Uploading claim data</div>
+      <div class="step" data-step="processing"><span class="s-dot"></span> AI Pipeline processing batch</div>
+      <div class="step" data-step="report"><span class="s-dot"></span> Auditing & Generating report</div>
+    </div>
+
+    <div class="status" id="status" style="display:none">
+      <span class="dot" id="status-dot"></span>
+      <span id="status-text">Idle</span>
+    </div>
+
+    <div id="result-body">
+      <div class="placeholder">No claim submitted yet.</div>
+    </div>
+  </div>
+</div>
+
+<script>
+  const fileInput = document.getElementById('file-input');
+  const dropzone = document.getElementById('dropzone');
+  const thumbs = document.getElementById('thumbs');
+  const submitBtn = document.getElementById('submit');
+  const steps = document.getElementById('steps');
+  const statusEl = document.getElementById('status');
+  const statusDot = document.getElementById('status-dot');
+  const statusText = document.getElementById('status-text');
+  const resultBody = document.getElementById('result-body');
+
+  let files = [];
+
+  // ---- file handling ----
+  dropzone.addEventListener('click', () => fileInput.click());
+  dropzone.addEventListener('dragover', e => { e.preventDefault(); dropzone.classList.add('drag'); });
+  dropzone.addEventListener('dragleave', () => dropzone.classList.remove('drag'));
+  dropzone.addEventListener('drop', e => {
+    e.preventDefault(); dropzone.classList.remove('drag');
+    addFiles(e.dataTransfer.files);
+  });
+  fileInput.addEventListener('change', () => addFiles(fileInput.files));
+
+  function addFiles(list) {
+    for (const f of list) {
+      if (!f.type.startsWith('image/')) continue;
+      files.push(f);
+    }
+    renderThumbs();
+  }
+
+  function renderThumbs() {
+    thumbs.innerHTML = '';
+    files.forEach((f, i) => {
+      const div = document.createElement('div');
+      div.className = 'thumb';
+      const url = URL.createObjectURL(f);
+      div.innerHTML = `<img src="${url}" alt=""><button data-i="${i}">×</button>`;
+      thumbs.appendChild(div);
+    });
+    thumbs.querySelectorAll('button').forEach(b => {
+      b.onclick = () => { files.splice(+b.dataset.i, 1); renderThumbs(); };
+    });
+  }
+
+  function setStep(name, state) {
+    const el = steps.querySelector(`[data-step="${name}"]`);
+    if (!el) return;
+    el.classList.remove('active', 'done');
+    if (state) el.classList.add(state);
+  }
+  function setStatus(text, cls) {
+    statusText.textContent = text;
+    statusDot.className = 'dot' + (cls ? ' ' + cls : '');
+  }
+
+  const connDot = document.getElementById('conn-dot');
+  const connText = document.getElementById('conn-text');
+
+  async function checkConnection() {
+    try {
+      const res = await fetch('/pipeline-status');
+      const data = await res.json();
+      if (data.port) {
+        connDot.className = 'dot ok';
+        connText.textContent = `Connected to pipeline (port ${data.port})`;
+        return true;
+      }
+    } catch (_) {}
+    connDot.className = 'dot err';
+    connText.textContent = 'Pipeline not found — press ▶ on the Webhook node in RocketRide.';
+    return false;
+  }
+  checkConnection();
+  setInterval(checkConnection, 5000);
+
+  // Helper to build the HTML for a single claim result card
+  function buildCardHtml(resData, rawText) {
+    try {
+        let privacyHtml = '';
+        const removed = resData?._privacy?.removed || {};
+        const items = [];
+        if (removed.gps) items.push(`📍 GPS location: ${removed.gps}`);
+        if (removed.timestamp) items.push(`🕐 Timestamp: ${removed.timestamp}`);
+        if (removed.device) items.push(`📱 Device: ${removed.device}`);
+        
+        if (items.length) {
+          privacyHtml = `
+            <div style="background:#12261a;border:1px solid #1f5133;border-radius:10px;padding:12px 14px;margin-bottom:14px;font-size:13px;color:#8fdcae;">
+               <strong style="color:#b6f2cd;">🔒 Privacy: stripped before processing</strong><br>
+               ${items.join('<br>')}
+             </div>`;
+        } else if (resData?._privacy) {
+          privacyHtml = `
+            <div style="background:var(--panel-2);border:1px solid var(--border);border-radius:10px;padding:12px 14px;margin-bottom:14px;font-size:13px;color:var(--muted);">
+               🔒 Image metadata scrubbed (no GPS/device data was present).
+             </div>`;
+        }
+
+        if (resData.success && resData.claim) {
+          const claim = resData.claim;
+          const audit = resData._audit;
+
+          let badgeColor = "#4f8cff"; 
+          if (audit.triage_level === "HIGH PRIORITY") badgeColor = "#ff5c5c"; 
+          if (audit.triage_level === "FAST TRACK") badgeColor = "#2ecc71"; 
+
+          let flagsHtml = "";
+          if (audit.flags && audit.flags.length > 0) {
+            flagsHtml = `
+              <div style="background:#2a1818; border:1px solid #ff5c5c; border-radius:8px; padding:10px 12px; margin-bottom:12px; font-size:12px; color:#ff8e8e;">
+                <strong>⚠️ Audit Discrepancies Flagged:</strong>
+                <ul style="margin:4px 0 0; padding-left:18px;">
+                  ${audit.flags.map(f => `<li>${f}</li>`).join('')}
+                </ul>
+              </div>`;
+          }
+
+          const partsBadges = (claim.damaged_parts || [])
+            .map(p => `<span style="background:var(--panel); border:1px solid var(--border); padding:2px 8px; border-radius:6px; font-size:12px;">${p}</span>`)
+            .join(' ');
+
+          return privacyHtml + flagsHtml + `
+            <div style="background:var(--panel-2); border:1px solid var(--border); border-radius:12px; padding:16px;">
+              <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+                <span style="font-weight:600; font-size:14px;">Claim Summary</span>
+                <span style="background:${badgeColor}; color:#fff; font-size:11px; font-weight:700; padding:3px 10px; border-radius:20px;">
+                  ${audit.triage_level}
+                </span>
+              </div>
+              <p style="font-size:13px; margin:0 0 14px; color:var(--text);">${claim.summary}</p>
+              <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px; font-size:12px; background:var(--panel); padding:12px; border-radius:8px; margin-bottom:12px;">
+                <div><strong style="color:var(--muted);">Severity:</strong> ${claim.severity}</div>
+                <div><strong style="color:var(--muted);">Est. Cost:</strong> ${claim.estimated_cost_range}</div>
+                <div><strong style="color:var(--muted);">Drivable:</strong> ${claim.drivable ? '✅ Yes' : '❌ No'}</div>
+                <div><strong style="color:var(--muted);">Audited At:</strong> ${audit.processed_at.split(' ')[1]}</div>
+              </div>
+              <div style="font-size:12px;">
+                <strong style="color:var(--muted); display:block; margin-bottom:6px;">Damaged Components:</strong>
+                <div style="display:flex; flex-wrap:wrap; gap:6px;">${partsBadges || 'None identified'}</div>
+              </div>
+            </div>
+          `;
+        } else {
+          return privacyHtml + `<pre class="report">${resData.raw_text || rawText}</pre>`;
+        }
+    } catch (e) {
+        return `<pre class="report">${rawText}</pre>`;
+    }
+  }
+
+  submitBtn.addEventListener('click', async () => {
+    const description = document.getElementById('description').value.trim();
+    const policy = document.getElementById('policy').value.trim();
+
+    if (files.length === 0 && !description) { alert('Add at least one photo or a description.'); return; }
+
+    submitBtn.disabled = true;
+    steps.style.display = 'flex';
+    statusEl.style.display = 'flex';
+    resultBody.innerHTML = '<div class="placeholder">Processing claim... (vision analysis takes time)</div>';
+    
+    ['upload','processing','report'].forEach(s => setStep(s, ''));
+    setStep('upload', 'active');
+    
+    let allResults = [];
+    let hasError = false;
+
+    try {
+        // Build common text description to append
+        const meta = [
+            description ? `Accident description: ${description}` : '',
+            policy ? `Policy number: ${policy}` : ''
+        ].filter(Boolean).join('\n');
+
+        // Loop through all uploaded files sequentially
+        if (files.length > 0) {
+            for (let i = 0; i < files.length; i++) {
+                setStep('processing', 'active');
+                setStatus(`Processing photo ${i + 1} of ${files.length}…`, 'run');
+
+                const res = await fetch('/submit', {
+                    method: 'POST',
+                    headers: { 'Content-Type': files[i].type || 'image/jpeg' },
+                    body: files[i]
+                });
+                
+                const raw = await res.text();
+                if (!res.ok) throw new Error(raw || `Proxy returned ${res.status}`);
+                
+                try {
+                    allResults.push({ title: `Photo ${i + 1}`, data: JSON.parse(raw), raw: raw });
+                } catch(e) {
+                    allResults.push({ title: `Photo ${i + 1}`, data: {}, raw: raw });
+                }
+            }
+        } else {
+            // Text only payload
+            setStep('processing', 'active');
+            setStatus('Processing textual claim info…', 'run');
+            const res = await fetch('/submit', {
+                method: 'POST',
+                headers: { 'Content-Type': 'text/plain' },
+                body: meta
+            });
+            const raw = await res.text();
+            if (!res.ok) throw new Error(raw || `Proxy returned ${res.status}`);
+            try {
+                allResults.push({ title: 'Report', data: JSON.parse(raw), raw: raw });
+            } catch(e) {
+                allResults.push({ title: 'Report', data: {}, raw: raw });
+            }
+        }
+
+        // Render Tabs
+        setStep('processing', 'done');
+        setStep('report', 'done');
+        setStatus('Claim batch processed', 'ok');
+
+        let tabsHtml = '<div class="tabs">';
+        let contentHtml = '';
+
+        allResults.forEach((res, i) => {
+            const isActive = i === 0 ? 'active' : '';
+            tabsHtml += `<button class="tab-btn ${isActive}" data-target="tab-${i}">${res.title}</button>`;
+            contentHtml += `<div class="tab-content ${isActive}" id="tab-${i}">` + buildCardHtml(res.data, res.raw) + `</div>`;
+        });
+        tabsHtml += '</div>';
+
+        // Add Export button logic
+        const exportHtml = `
+          <div class="export-bar">
+            <button class="btn-sm" id="export-json">📥 Export Batch JSON</button>
+            <button class="btn-sm" id="export-pdf">📄 Print / Save PDF</button>
+          </div>`;
+
+        resultBody.innerHTML = tabsHtml + contentHtml + exportHtml;
+
+        // Attach listeners to tabs
+        document.querySelectorAll('.tab-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+                document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+                btn.classList.add('active');
+                document.getElementById(btn.dataset.target).classList.add('active');
+            });
+        });
+
+        // Attach listener to PDF export (Direct Download)
+        document.getElementById('export-pdf').addEventListener('click', () => {
+            const pdfBtn = document.getElementById('export-pdf');
+            pdfBtn.innerText = "⏳ Generating PDF...";
+            pdfBtn.disabled = true;
+
+            // 1. Create a clean, virtual container for the PDF
+            const printContainer = document.createElement('div');
+            printContainer.style.padding = '20px';
+            printContainer.style.background = '#fff';
+            printContainer.style.color = '#000';
+            printContainer.style.fontFamily = '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+
+            // Add an official report header
+            const mainTitle = document.createElement('h2');
+            mainTitle.innerText = "ClaimDesk Incident Report";
+            mainTitle.style.borderBottom = '2px solid #000';
+            mainTitle.style.paddingBottom = '10px';
+            mainTitle.style.marginBottom = '20px';
+            printContainer.appendChild(mainTitle);
+
+            // 2. Clone all hidden and visible tabs into the PDF container
+            const allTabs = document.querySelectorAll('.tab-content');
+            allTabs.forEach((tab, index) => {
+                const tabTitle = document.querySelectorAll('.tab-btn')[index].innerText;
+                
+                const section = document.createElement('div');
+                section.style.marginBottom = '30px';
+                section.style.pageBreakInside = 'avoid'; // Prevent awkward page cuts
+                
+                const heading = document.createElement('h3');
+                heading.innerText = tabTitle;
+                section.appendChild(heading);
+
+                const clone = tab.cloneNode(true);
+                clone.style.display = 'block'; // Force visible
+                
+                // Convert dark mode CSS variables to clean white mode for the PDF
+                clone.innerHTML = clone.innerHTML
+                    .replace(/var\(--panel-2\)/g, '#f9f9f9')
+                    .replace(/var\(--panel\)/g, '#fff')
+                    .replace(/var\(--border\)/g, '#ddd')
+                    .replace(/var\(--text\)/g, '#111')
+                    .replace(/var\(--muted\)/g, '#555');
+
+                section.appendChild(clone);
+                printContainer.appendChild(section);
+            });
+
+            // 3. Configure and trigger the direct PDF download
+            const opt = {
+              margin:       0.5,
+              filename:     `Claim_Report_${Date.now()}.pdf`,
+              image:        { type: 'jpeg', quality: 0.98 },
+              html2canvas:  { scale: 2, useCORS: true },
+              jsPDF:        { unit: 'in', format: 'letter', orientation: 'portrait' }
+            };
+
+            html2pdf().set(opt).from(printContainer).save().then(() => {
+                // Reset button after download finishes
+                pdfBtn.innerText = "📄 Print / Save PDF";
+                pdfBtn.disabled = false;
+            });
+        });
+
+        // Attach listener to JSON export
+        document.getElementById('export-json').addEventListener('click', () => {
+            const exportPayload = {
+                exported_at: new Date().toISOString(),
+                policy_number: policy || "N/A",
+                items: allResults.map(r => r.data)
+            };
+            const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(exportPayload, null, 2));
+            const downloadAnchorNode = document.createElement('a');
+            downloadAnchorNode.setAttribute("href", dataStr);
+            downloadAnchorNode.setAttribute("download", `claim_batch_${Date.now()}.json`);
+            document.body.appendChild(downloadAnchorNode);
+            downloadAnchorNode.click();
+            downloadAnchorNode.remove();
+        });
+
+    } catch (err) {
+      setStatus('Error', 'err');
+      resultBody.innerHTML = `<pre class="report">Could not process the claim.\n\n${err.message}</pre>`;
+    } finally {
+      submitBtn.disabled = false;
+    }
+  });
+</script>
+</body>
+</html>
