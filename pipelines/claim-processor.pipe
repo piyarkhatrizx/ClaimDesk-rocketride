@@ -113,6 +113,29 @@
       ]
     },
     {
+      "id": "response_answers_1",
+      "provider": "response_answers",
+      "name": "Return Answers",
+      "config": {
+        "laneName": "answers",
+        "name": "Return Answers"
+      },
+      "ui": {
+        "position": {
+          "x": 2390,
+          "y": 450
+        },
+        "nodeType": "default",
+        "formDataValid": true
+      },
+      "input": [
+        {
+          "lane": "answers",
+          "from": "llm_ollama_1"
+        }
+      ]
+    },
+    {
       "id": "question_1",
       "provider": "question",
       "name": "Question",
@@ -122,8 +145,8 @@
       },
       "ui": {
         "position": {
-          "x": 1950,
-          "y": 700
+          "x": 2160,
+          "y": 480
         },
         "nodeType": "default",
         "formDataValid": true
@@ -136,24 +159,29 @@
       ]
     },
     {
-      "id": "agent_rocketride_1",
-      "provider": "agent_rocketride",
-      "name": "RocketRide Wave",
+      "id": "llm_ollama_1",
+      "provider": "llm_ollama",
+      "name": "Ollama",
       "config": {
-        "agent_description": "You are an expert AI insurance claim intake assessor. Analyze accident descriptions and visual assessments to produce structured claim reports.",
-        "instructions": [
-          "Analyze this vehicle damage report. Respond with ONLY a valid JSON object, no markdown, no explanation, no preamble. Use this exact schema:\nAnalyze this vehicle damage report. Respond with ONLY a valid JSON object, no markdown, no explanation, no preamble. Only describe damage you can clearly see in the image. Do not infer or assume damage that is not visible. If something is unclear, say \"unable to confirm from photo.\"Use this exact schema:\n{\"summary\": \"A detailed 3-5 sentence description including: what type of collision occurred, which areas of the vehicle are damaged, the visible extent of damage (crushed, cracked, dented, scratched), any visible safety concerns (fluid leaks, deployed airbags, broken glass), and whether the vehicle appears structurally compromised\", \"severity\": \"Low|Moderate|Severe|Totaled\", \"damaged_parts\": [\"...\"], \"estimated_cost_range\": \"$X - $Y\", \"safety_hazards\": [\"...\"], \"drivable\": true/false}"
-        ],
-        "max_waves": 2,
-        "name": "RocketRide Wave",
+        "profile": "custom",
+        "custom": {
+          "serverbase": "http://localhost:11434/v1",
+          "model": "qwen2.5:7b",
+          "modelTotalTokens": 4069,
+          "temperature": 0.1,
+        },
+        "llama3_3": {
+          "serverbase": "http://localhost:11434/v1"
+        },
+        "name": "Ollama",
         "parameters": {
           "google": {}
         }
       },
       "ui": {
         "position": {
-          "x": 2200,
-          "y": 470
+          "x": 2270,
+          "y": 570
         },
         "nodeType": "default",
         "formDataValid": true
@@ -164,105 +192,10 @@
           "from": "question_1"
         }
       ]
-    },
-    {
-      "id": "llm_ollama_1",
-      "provider": "llm_ollama",
-      "name": "Ollama",
-      "config": {
-        "profile": "custom",
-        "custom": {
-          "serverbase": "http://localhost:11434/v1",
-          "model": "qwen2.5:7b",
-          "modelTotalTokens": 4096,
-          "temperature": 0.1
-        },
-        "name": "Ollama",
-        "parameters": {
-          "google": {}
-        }
-      },
-      "ui": {
-        "position": {
-          "x": 2180,
-          "y": 710
-        },
-        "nodeType": "default",
-        "formDataValid": false
-      },
-      "control": [
-        {
-          "classType": "llm",
-          "from": "agent_rocketride_1"
-        }
-      ]
-    },
-    {
-      "id": "response_answers_1",
-      "provider": "response_answers",
-      "name": "Return Answers",
-      "config": {
-        "laneName": "answers",
-        "name": "Return Answers"
-      },
-      "ui": {
-        "position": {
-          "x": 2410,
-          "y": 720
-        },
-        "nodeType": "default",
-        "formDataValid": true
-      },
-      "input": [
-        {
-          "lane": "answers",
-          "from": "agent_rocketride_1"
-        }
-      ]
-    },
-    {
-      "id": "response_documents_1",
-      "provider": "response_documents",
-      "name": "Return Documents",
-      "config": {
-        "laneName": "documents",
-        "name": "Return Documents"
-      },
-      "ui": {
-        "position": {
-          "x": 2460,
-          "y": 560
-        },
-        "nodeType": "default",
-        "formDataValid": true
-      }
-    },
-    {
-      "id": "memory_internal_1",
-      "provider": "memory_internal",
-      "name": "Memory (Internal)",
-      "config": {
-        "type": "memory_internal",
-        "name": "Memory (Internal)"
-      },
-      "ui": {
-        "position": {
-          "x": 2240,
-          "y": 640
-        },
-        "nodeType": "default",
-        "formDataValid": true
-      },
-      "control": [
-        {
-          "classType": "memory",
-          "from": "agent_rocketride_1"
-        }
-      ]
     }
   ],
   "version": 1,
-  "docRevision": 120,
+  "docRevision": 192,
   "isLocked": false,
   "snapToGrid": true,
   "snapGridSize": [
