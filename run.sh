@@ -3,6 +3,21 @@
 set -e
 
 cd "$(dirname "$0")"
+# ---- PYTHON VERSION CHECK ----
+
+if ! command -v python3 >/dev/null 2>&1; then
+    echo "Python 3 is not installed."
+    echo "ClaimDesk requires Python 3.10 or newer."
+    exit 1
+fi
+
+if ! python3 -c 'import sys; exit(0 if sys.version_info >= (3, 10) else 1)'; then
+    echo "ClaimDesk requires Python 3.10 or newer."
+    echo "Current version: $(python3 --version)"
+    exit 1
+fi
+
+echo "✓ $(python3 --version)"
 
 # ---- PYTHON DEPENDENCIES ----
 
