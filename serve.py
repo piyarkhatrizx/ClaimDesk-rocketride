@@ -7,7 +7,7 @@ current webhook port, so you never hand-type a changing port.
 Run:  python serve.py
 Open: http://localhost:8000
 """
-
+import http.client
 import http.server
 import socketserver
 import urllib.request
@@ -19,6 +19,7 @@ import socket
 import io
 import time
 from PIL import Image
+
 
 try:
     from pillow_heif import register_heif_opener
@@ -171,48 +172,110 @@ def find_webhook_port():
 
     now = time.time()
 
-    # Return cached port if recently verified (within 30s)
+    # Return cached port if recently verified
     if _cached_port and (now - _cache_time) < 30:
         return _cached_port
 
-    # Quick TCP check on cached port — no HTTP request
+    # Verify cached port is still alive
     if _cached_port:
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
             s.settimeout(0.1)
+
             if s.connect_ex(("127.0.0.1", _cached_port)) == 0:
                 _cache_time = now
                 return _cached_port
-        _cached_port = None  # port died, rescan
 
-    # Full scan — only on first run or when cached port dies
+        _cached_port = None
+
+    # Scan RocketRide's dynamic high ports
     for port in SCAN_RANGE:
-        if port == 11434:  # skip Ollama's port
+
+        # Don't identify our own web server
+        if port == SERVE_PORT:
             continue
+
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
             s.settimeout(0.02)
+
             if s.connect_ex(("127.0.0.1", port)) != 0:
                 continue
+
+        url = f"http://127.0.0.1:{port}/webhook"
+
         try:
-            # Send a test request to verify it's a RocketRide webhook
-            test_data = b'{"_ping": true}'
-            url = f"http://localhost:{port}/webhook"
-            req = urllib.request.Request(url, method="POST", data=test_data)
+            test_data = b'{"_ping":true}'
+
+            req = urllib.request.Request(
+                url,
+                method="POST",
+                data=test_data
+            )
+
             req.add_header("Content-Type", "application/json")
-            req.add_header("Authorization", f"Bearer {AUTH_KEY}")
+            req.add_header(
+                "Authorization",
+                f"Bearer {AUTH_KEY}"
+            )
+
             with urllib.request.urlopen(req, timeout=1.0) as resp:
-                body = resp.read(500).decode("utf-8", "ignore").lower()
+                body = resp.read(1000).decode(
+                    "utf-8",
+                    "ignore"
+                ).lower()
+
+                # Ignore normal websites
                 if "<!doctype html" in body or "<html" in body:
                     continue
-                # Look for RocketRide-specific response signatures
-                if "objectsrequested" in body or "objectscompleted" in body or "status" in body:
-                    _cached_port = port
-                    _cache_time = now
-                    print(f"  Found webhook on port {port}")
-                    return port
-        except urllib.error.HTTPError:
+
+                _cached_port = port
+                _cache_time = now
+
+                print(
+                    f"Found RocketRide webhook on port {port} "
+                    f"(HTTP {resp.status})"
+                )
+
+                return port
+
+        except urllib.error.HTTPError as e:
+            # IMPORTANT:
+            # A RocketRide webhook can return an HTTP error because
+            # our ping isn't a real pipeline payload.
+            body = e.read(1000).decode(
+                "utf-8",
+                "ignore"
+            ).lower()
+
+            # 404 strongly suggests this server simply doesn't have
+            # a /webhook endpoint.
+            if e.code == 404:
+                continue
+
+            # Ignore HTML error pages from unrelated web servers
+            if "<!doctype html" in body or "<html" in body:
+                continue
+
+            # 400/401/403/405/422 etc. still prove that something
+            # is responding specifically at /webhook.
+            _cached_port = port
+            _cache_time = now
+
+            print(
+                f"Found possible RocketRide webhook on port {port} "
+                f"(HTTP {e.code})"
+            )
+
+            return port
+
+        except (
+            urllib.error.URLError,
+            http.client.BadStatusLine,
+            ConnectionResetError,
+            TimeoutError,
+            OSError,
+        ):
             continue
-        except Exception:
-            continue
+
     return None
 
 
