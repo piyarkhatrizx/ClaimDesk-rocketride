@@ -29,6 +29,7 @@ except ImportError:
 # ---- config ----
 SERVE_PORT = 8000
 AUTH_KEY = os.environ.get("ROCKETRIDE_AUTH", "pk_9b629fbc106be121e39d1e0701b48417")
+CHAT_AUTH_KEY = os.environ.get("ROCKETRIDE_CHAT_AUTH", "pk_122761b5e1e9105cb94171d45b849a84")
 WEBHOOK_PORT = os.environ.get("WEBHOOK_PORT", None)  # set to skip port scanning
 SCAN_RANGE = range(50000, 65001)   # RocketRide picks high ports; scan this range
 SITE_FILE = "web/index.html"
@@ -288,26 +289,108 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             try:
                 with open(SITE_FILE, "rb") as f:
                     content = f.read()
+
                 self.send_response(200)
                 self.send_header("Content-Type", "text/html")
-                self._cors(); self.end_headers()
+                self._cors()
+                self.end_headers()
                 self.wfile.write(content)
+
             except FileNotFoundError:
                 self.send_error(404, f"{SITE_FILE} not found")
+
             return
 
-        # Pipeline health check endpoint (polled every 5s by frontend)
+        # Serve static files
+        if self.path.startswith("/web/"):
+            filepath = self.path.lstrip("/")
+
+            if os.path.exists(filepath):
+                ext = os.path.splitext(filepath)[1]
+                content_types = {
+                    ".css": "text/css",
+                    ".js": "application/javascript",
+                    ".png": "image/png",
+                    ".jpg": "image/jpeg",
+                    ".jpeg": "image/jpeg",
+                    ".svg": "image/svg+xml",
+                }
+
+                self.send_response(200)
+                self.send_header(
+                    "Content-Type",
+                    content_types.get(ext, "application/octet-stream")
+                )
+                self._cors()
+                self.end_headers()
+
+                with open(filepath, "rb") as f:
+                    self.wfile.write(f.read())
+
+                return
+
+            self.send_error(404)
+            return
+
+        # Pipeline health check
         if self.path == "/pipeline-status":
             port = find_webhook_port()
+
             self.send_response(200)
             self.send_header("Content-Type", "application/json")
-            self._cors(); self.end_headers()
-            self.wfile.write(json.dumps({"port": port}).encode())
+            self._cors()
+            self.end_headers()
+
+            self.wfile.write(
+                json.dumps({"port": port}).encode()
+            )
             return
 
         self.send_error(404)
 
     def do_POST(self):
+        if self.path == "/chat":
+            # Call Ollama directly for adjuster chat with full conversation history
+            length = int(self.headers.get("Content-Length", 0))
+            body = json.loads(self.rfile.read(length))
+
+            # Accept either full history or single message
+            if "messages" in body:
+                messages = [{"role": "system", "content": "You are an AI assistant for insurance adjusters. Help understand claims, explain triage decisions, assess fraud risk, and recommend next steps. Be professional and concise. Only reference details from the claim report provided."}] + body["messages"]
+            else:
+                messages = [
+                    {"role": "system", "content": "You are an AI assistant for insurance adjusters."},
+                    {"role": "user", "content": body.get("message", "")}
+                ]
+
+            try:
+                ollama_req = urllib.request.Request(
+                    "http://localhost:11434/api/chat",
+                    data=json.dumps({
+                        "model": "llama3.1:8b",
+                        "messages": messages,
+                        "stream": False
+                    }).encode(),
+                    method="POST"
+                )
+                ollama_req.add_header("Content-Type", "application/json")
+
+                with urllib.request.urlopen(ollama_req, timeout=120) as resp:
+                    data = json.loads(resp.read())
+                    reply = data.get("message", {}).get("content", "No response")
+
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json")
+                self._cors(); self.end_headers()
+                self.wfile.write(json.dumps({"reply": reply}).encode())
+
+            except Exception as e:
+                self.send_response(502)
+                self.send_header("Content-Type", "application/json")
+                self._cors(); self.end_headers()
+                self.wfile.write(json.dumps({"error": str(e)}).encode())
+            return
+
         if self.path != "/submit":
             self.send_error(404); return
 
