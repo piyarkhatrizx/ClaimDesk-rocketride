@@ -105,6 +105,8 @@ header span.sub { color: var(--muted); font-size: 13px; margin-left: 4px; }
 }
 .card h2 { margin: 0 0 4px; font-size: 15px; font-weight: 600; }
 .card p.hint { margin: 0 0 18px; color: var(--muted); font-size: 13px; }
+.result-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.result-header h2 { margin: 0; }
 
 /* ---- FORM ELEMENTS ---- */
 label { display: block; font-size: 13px; color: var(--muted); margin: 16px 0 6px; }

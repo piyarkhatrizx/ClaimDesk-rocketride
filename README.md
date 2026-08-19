@@ -9,6 +9,7 @@ Users can upload vehicle damage photos and an accident description, then ClaimDe
 - [Features](#features)
 - [Architecture](#architecture)
 - [Tech Stack](#tech-stack)
+- [Limitations](#limitations)
 - [Quick Start](#quick-start)
 - [Project Structure](#project-structure)
 
@@ -19,6 +20,7 @@ Users can upload vehicle damage photos and an accident description, then ClaimDe
 - Description vs. image contradiction checking
 - Deterministic claim triage: **Fast Track, Standard, High Priority**
 - Safety and discrepancy flags
+- Guardrails: prompt-injection, PII, and JSON-format validation on the analysis output
 - Adjuster AI assistant using Ollama
 - EXIF metadata removal from uploaded images
 - Claim history
@@ -48,6 +50,15 @@ Claim_Process.pipe
 LLaVA Vision Analysis
    │
    ▼
+NER + Anonymization
+   │
+   ▼
+Claim Analysis Prompt (Llama 3.1 8B)
+   │
+   ▼
+Guardrails
+   │
+   ▼
 Structured Claim Report
 ```
 
@@ -59,9 +70,14 @@ ClaimDesk automatically discovers RocketRide's dynamically assigned local engine
 - **Python** — backend and local server
 - **Ollama** — local AI runtime
 - **LLaVA** — vehicle damage image analysis
-- **Llama 3.1 8B** — adjuster assistant
+- **Llama 3.1 8B** — claim analysis, sentiment scoring, and the adjuster assistant
+- **RocketRide Guardrails** — prompt-injection, PII, and output-format validation
 - **HTML / CSS / JavaScript** — frontend
 - **Pillow / pillow-heif** — image handling and metadata removal
+
+## Limitations
+
+ClaimDesk relies on local, CPU-run models for all its functions, sacrificing accuracy and speed for user privacy. The vision model has occasionally misjudged the extent of vehicle damage, recognizing damage on vehicles with no visible damage or failing to identify damage in a photo. The analysis model has, on occasion, responded with conversational text instead of the required JSON report; in these instances, the claim is flagged as "Needs Manual Review". Because ClaimDesk maintains a single instance of the claim analysis model during the app's lifetime, one claim's analysis can theoretically influence another; this can be avoided by restarting ./run.sh. Finally, claims take 30 seconds to a few minutes to process depending on the machine's processing power, and each claim has a 30-second vision model timeout that can result in failures on slow machines.
 
 ## Quick Start
 
@@ -79,11 +95,15 @@ llava:latest
 llama3.1:8b
 ```
 
+The vision model is configurable via `ROCKETRIDE_VISION_MODEL` in `.env` (see below) -- whichever model you set there must be pulled locally (`ollama pull <model>`) before starting.
+
 ### Run
 
 ```bash
-git clone <repository-url>
+git clone <https://github.com/piyarkhatrizx/ClaimDesk-rocketride.git>
 cd claimdesk-rocketride
+
+cp .env.example .env
 
 python3 -m venv .venv
 source .venv/bin/activate
@@ -91,6 +111,8 @@ source .venv/bin/activate
 chmod +x run.sh
 ./run.sh
 ```
+
+`.env` is gitignored and not created automatically -- copy it from `.env.example` before your first run, or `ClaimDesk.py` and the pipeline won't have `ROCKETRIDE_APIKEY` / `ROCKETRIDE_VISION_MODEL` to work with.
 
 Make sure RocketRide is connected locally in VS Code before starting.
 
@@ -107,12 +129,12 @@ Press `Ctrl+C` to stop the web server, pipeline launcher, and active RocketRide 
 ```text
 claimdesk-rocketride/
 ├── pipelines/
-│   ├── Claim_Process.pipe
-│   └── Claim_Chat.pipe
+│   └── Claim_Process.pipe
 ├── web/
 │   ├── index.html
 │   ├── app.js
 │   └── style.css
+├── .env.example
 ├── ClaimDesk.py
 ├── serve.py
 ├── run.sh

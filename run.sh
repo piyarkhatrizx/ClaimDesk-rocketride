@@ -66,8 +66,12 @@ for model in "${required_models[@]}"; do
     fi
 done
 
+# ---- LOAD ENV ----
+if [ -f .env ]; then
+    export $(grep -v '^#' .env | xargs)
+fi
 # ---- START ROCKETRIDE PIPELINE ----
-rm -f .rocketride_token .rocketride_uri
+rm -f .rocketride_token .rocketride_uri .rocketride_port .rocketride_auth
 echo ""
 echo "Starting RocketRide pipeline..."
 
@@ -76,17 +80,32 @@ PIPELINE_PID=$!
 
 echo "Pipeline launcher PID: $PIPELINE_PID"
 
-# Give it time to connect/start
-sleep 3
-
-# Make sure claimdesk.py did not crash
-if ! kill -0 "$PIPELINE_PID" 2>/dev/null; then
-    echo ""
-    echo "RocketRide pipeline failed to start."
-    echo ""
-    cat claimdesk.log
-    exit 1
-fi
+# Wait for ClaimDesk.py to actually finish connecting (it writes
+# .rocketride_auth once client.use() succeeds) instead of guessing a fixed
+# delay. Starting serve.py before this file exists is a real race: the web
+# server comes up immediately and will forward requests with a stale/empty
+# token, producing "Task token is required" on the very first submission.
+echo "Waiting for RocketRide pipeline to connect..."
+WAITED=0
+while [ ! -f .rocketride_auth ]; do
+    if ! kill -0 "$PIPELINE_PID" 2>/dev/null; then
+        echo ""
+        echo "RocketRide pipeline failed to start."
+        echo ""
+        cat claimdesk.log
+        exit 1
+    fi
+    if [ "$WAITED" -ge 60 ]; then
+        echo ""
+        echo "RocketRide pipeline did not connect within 30s."
+        echo ""
+        cat claimdesk.log
+        exit 1
+    fi
+    sleep 0.5
+    WAITED=$((WAITED + 1))
+done
+echo "Pipeline connected."
 
 # ---- CLEANUP ----
 

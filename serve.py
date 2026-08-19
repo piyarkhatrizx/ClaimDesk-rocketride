@@ -29,12 +29,72 @@ except ImportError:
 
 # ---- config ----
 SERVE_PORT = 8000
-AUTH_KEY = os.environ.get("ROCKETRIDE_AUTH", "pk_9b629fbc106be121e39d1e0701b48417")
-CHAT_AUTH_KEY = os.environ.get("ROCKETRIDE_CHAT_AUTH", "pk_122761b5e1e9105cb94171d45b849a84")
-WEBHOOK_PORT = os.environ.get("WEBHOOK_PORT", None)  # set to skip port scanning
-SCAN_RANGE = range(50000, 65001)   # RocketRide picks high ports; scan this range
 SITE_FILE = "web/index.html"
+SCAN_RANGE = range(50000, 65536)
 
+def extract_json_object(text):
+    """
+    Find and parse the first valid claim JSON object embedded in text, even
+    if the LLM wrapped it in markdown headers/prose (e.g. "### Report 1\n```json\n{...}").
+    Scans every balanced {...} block and returns the first one that parses
+    and looks like a claim (has a "summary" key), rather than only stripping
+    a single leading ```json fence.
+    Returns None if no valid claim object is found.
+    """
+    start = None
+    depth = 0
+    in_string = False
+    escape = False
+    for i, ch in enumerate(text):
+        if in_string:
+            if escape:
+                escape = False
+            elif ch == "\\":
+                escape = True
+            elif ch == '"':
+                in_string = False
+            continue
+        if ch == '"':
+            in_string = True
+        elif ch == "{":
+            if depth == 0:
+                start = i
+            depth += 1
+        elif ch == "}":
+            if depth > 0:
+                depth -= 1
+                if depth == 0 and start is not None:
+                    candidate = text[start:i + 1]
+                    try:
+                        parsed = json.loads(candidate)
+                        if isinstance(parsed, dict) and "summary" in parsed:
+                            return parsed
+                    except json.JSONDecodeError:
+                        pass
+                    start = None
+    return None
+
+
+def _read_file(path, default=""):
+    try:
+        with open(path) as f:
+            return f.read().strip()
+    except FileNotFoundError:
+        return default
+
+# All connection info comes from ClaimDesk.py or environment
+ENV_AUTH_KEY = os.environ.get("ROCKETRIDE_AUTH")
+CHAT_AUTH_KEY = os.environ.get("ROCKETRIDE_CHAT_AUTH", "")
+WEBHOOK_PORT = os.environ.get("WEBHOOK_PORT") or _read_file(".rocketride_port") or None
+
+def get_auth_key():
+    """
+    Re-read .rocketride_auth on every call instead of caching it once.
+    ClaimDesk.py rewrites this file with a new publicToken every time the
+    pipeline (re)connects, so a cached value goes stale -- causing "Task
+    token is required" once the old token no longer maps to a running task.
+    """
+    return ENV_AUTH_KEY or _read_file(".rocketride_auth")
 
 # =============================================================================
 # DETERMINISTIC RULES ENGINE
@@ -42,13 +102,49 @@ SITE_FILE = "web/index.html"
 # to triage claims and flag contradictions before an adjuster sees them.
 # =============================================================================
 def audit_claim_logic(claim_data: dict) -> dict:
+    # Rule -1: The AI's response couldn't be parsed as valid JSON at all.
+    # This is NOT the same thing as "no damage found" -- we genuinely don't
+    # know what the AI concluded, so this must never be treated as confirmed
+    # no-damage (which would wrongly mark a real damage claim ineligible).
+    # Route it to manual review instead of guessing.
+    if claim_data.get("_fallback"):
+        return {
+            "triage_level": "NEEDS MANUAL REVIEW",
+            "flags": [
+                "UNPARSEABLE AI RESPONSE: The AI's output could not be read "
+                "as a valid claim report. A human must review the raw "
+                "response before this claim can be triaged -- do not treat "
+                "this as a 'no damage' determination."
+            ],
+            "processed_at": time.strftime("%Y-%m-%d %H:%M:%S")
+        }
+
     severity = str(claim_data.get("severity", "Low")).capitalize()
-    damaged_parts = [str(p).lower() for p in claim_data.get("damaged_parts", [])]
+    damaged_parts = [str(p).lower() for p in claim_data.get("damaged_parts") or []]
     drivable = bool(claim_data.get("drivable", True))
     hazards = claim_data.get("safety_hazards", [])
+    requires_mechanic = bool(claim_data.get("requires_mechanic_inspection", False))
+    confidence = claim_data.get("confidence", {}) or {}
 
     flags = []
     triage_level = "STANDARD"
+
+    # Rule 0: No confirmed damage -- do not let the AI approve or price a claim
+    # it can't actually substantiate. This does NOT depend on the LLM
+    # following instructions correctly: it triggers on the structural
+    # signal (an empty damaged_parts list) as well as the model's own
+    # requires_mechanic_inspection flag, so a claim can't slip through fast
+    # track / high priority triage without any damage actually described.
+    if requires_mechanic or not damaged_parts:
+        return {
+            "triage_level": "MECHANIC INSPECTION REQUIRED",
+            "flags": [
+                "INSUFFICIENT EVIDENCE: No damage could be confirmed from the "
+                "photo/description. Claimant must obtain a licensed mechanic's "
+                "inspection report before this claim can proceed."
+            ],
+            "processed_at": time.strftime("%Y-%m-%d %H:%M:%S")
+        }
 
     # Rule 1: Structural / critical component check
     critical_parts = ["frame", "radiator", "engine", "airbag", "steering", "axle"]
@@ -68,6 +164,19 @@ def audit_claim_logic(claim_data: dict) -> dict:
     # Rule 3: Fast-track low-severity claims
     if severity == "Low" and not has_critical_damage and drivable and len(damaged_parts) <= 2:
         triage_level = "FAST TRACK"
+
+    # Rule 4: Low-confidence damage assessment -- damage was described, but
+    # the model itself wasn't sure. Note this only catches cases where the
+    # model reports its own uncertainty; it can't catch a confidently wrong
+    # (fabricated) damage list, since there's no independent signal to check
+    # it against here.
+    damaged_parts_confidence = confidence.get("damaged_parts")
+    if isinstance(damaged_parts_confidence, (int, float)) and damaged_parts_confidence < 50:
+        flags.append(
+            f"LOW CONFIDENCE ({damaged_parts_confidence}%): AI was not "
+            "confident in the damaged parts it identified -- recommend "
+            "manual review before relying on this assessment."
+        )
 
     return {
         "triage_level": triage_level,
@@ -214,7 +323,7 @@ def find_webhook_port():
             req.add_header("Content-Type", "application/json")
             req.add_header(
                 "Authorization",
-                f"Bearer {AUTH_KEY}"
+                f"Bearer {get_auth_key()}"
             )
 
             with urllib.request.urlopen(req, timeout=1.0) as resp:
@@ -503,7 +612,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         req = urllib.request.Request(
             f"http://localhost:{port}/webhook", data=body, method="POST")
         req.add_header("Content-Type", content_type)
-        req.add_header("Authorization", f"Bearer {AUTH_KEY}")
+        req.add_header("Authorization", f"Bearer {get_auth_key()}")
 
         try:
             with urllib.request.urlopen(req, timeout=600) as resp:
@@ -568,18 +677,29 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                         # Strict JSON parse — ideal path
                         claim_json = json.loads(clean_text)
                     except json.JSONDecodeError:
-                        # Fallback: LLM returned chatty text instead of JSON
-                        clean_text_lower = clean_text.lower()
-                        is_severe = "severe" in clean_text_lower or "broken" in clean_text_lower
-                        claim_json = {
-                            "summary": clean_text[:300] + ("..." if len(clean_text) > 300 else ""),
-                            "severity": "Moderate" if "damage" in clean_text_lower else "Low",
-                            "damaged_parts": [],
-                            "estimated_cost_range": "Pending Adjuster Review",
-                            "safety_hazards": ["Needs visual confirmation"],
-                            "drivable": False if is_severe else True,
-                            "_fallback": True
-                        }
+                        # The model sometimes wraps the real JSON in markdown
+                        # headers/prose (e.g. "### Report 1\n```json\n{...}").
+                        # Recover the embedded object before giving up.
+                        recovered = extract_json_object(clean_text)
+                        if recovered is not None:
+                            claim_json = recovered
+                        else:
+                            # Truly unparseable. This is NOT the same thing as
+                            # "no damage found" -- we genuinely don't know what
+                            # the AI concluded, so don't claim damaged_parts is
+                            # empty (that would incorrectly trigger the "no
+                            # damage" mechanic-inspection rule below and could
+                            # mark a real damage claim ineligible). Flag it as
+                            # unparsed instead and let a human read the raw text.
+                            claim_json = {
+                                "summary": clean_text[:300] + ("..." if len(clean_text) > 300 else ""),
+                                "severity": "Unknown",
+                                "damaged_parts": [],
+                                "estimated_cost_range": "Pending Adjuster Review",
+                                "safety_hazards": ["AI response could not be parsed -- needs manual review"],
+                                "drivable": True,
+                                "_fallback": True
+                            }
 
                     # ---- POST-PROCESSING ----
                     # Run deterministic audit rules on the AI output
@@ -649,7 +769,7 @@ if __name__ == "__main__":
                 raise
 
     print(f"ClaimDesk:  http://localhost:{current_port}")
-    print(f"Auth key: {AUTH_KEY[:12]}...")
+    print(f"Auth key: {get_auth_key()[:12]}...")
     print("Keep the pipeline running. Ctrl+C to stop.\n")
 
     with httpd:

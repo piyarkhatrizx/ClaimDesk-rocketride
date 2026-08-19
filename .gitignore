@@ -209,3 +209,11 @@ __marimo__/
 .env
 .claude/.DS_Store
 .claude/
+
+# ClaimDesk runtime state -- regenerated fresh by run.sh/ClaimDesk.py on
+# every start (dynamic port, task token, webhook auth key). Machine- and
+# session-specific, never meaningful to commit.
+.rocketride_token
+.rocketride_uri
+.rocketride_port
+.rocketride_auth

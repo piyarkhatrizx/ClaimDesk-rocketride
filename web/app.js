@@ -21,6 +21,9 @@ const chatInput = document.getElementById('chat-input');
 const chatSend = document.getElementById('chat-send');
 const historyToggle = document.getElementById('toggle-history');
 const sidebar = document.querySelector('.sidebar');
+const newClaimBtn = document.getElementById('new-claim-btn');
+const descriptionInput = document.getElementById('description');
+const policyInput = document.getElementById('policy');
 
 let files = [];
 let currentClaimContext = null;
@@ -75,6 +78,41 @@ function setStatus(text, cls) {
   statusText.textContent = text;
   statusDot.className = 'dot' + (cls ? ' ' + cls : '');
 }
+
+// =============================================================================
+// NEW CLAIM
+// Clears the intake form and result panel so a new photo/claim can be added
+// =============================================================================
+function startNewClaim() {
+  // Clear uploaded photos
+  files = [];
+  renderThumbs();
+  fileInput.value = '';
+
+  // Clear form fields
+  descriptionInput.value = '';
+  policyInput.value = '';
+
+  // Reset result panel
+  steps.style.display = 'none';
+  statusEl.style.display = 'none';
+  ['upload', 'processing', 'crosscheck', 'report'].forEach(s => setStep(s, ''));
+  resultBody.innerHTML = '<div class="placeholder">No claim submitted yet.</div>';
+
+  // Reset chat panel
+  chatPanel.classList.remove('visible');
+  chatMessages.innerHTML = '';
+  chatHistory = [];
+  currentClaimContext = null;
+
+  // Deselect any active claim in history
+  document.querySelectorAll('.sidebar-item').forEach(s => s.classList.remove('active'));
+
+  submitBtn.disabled = false;
+  dropzone.scrollIntoView({ behavior: 'smooth', block: 'center' });
+}
+
+newClaimBtn.addEventListener('click', startNewClaim);
 
 // =============================================================================
 // PIPELINE CONNECTION CHECK

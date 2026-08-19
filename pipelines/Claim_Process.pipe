@@ -1,5 +1,5 @@
 {
-  "project_id": "2658df41-9ba8-46b9-8f08-10b06d69e965",
+  "project_id": "54c2314a-42b6-4c02-845e-dbb41f44a883",
   "components": [
     {
       "id": "webhook_1",
@@ -29,10 +29,10 @@
         "profile": "custom",
         "custom": {
           "serverbase": "http://localhost:11434/v1",
-          "model": "llava:latest",
-          "modelTotalTokens": 4096,
-          "systemPrompt": "You are a strictly literal, factual insurance damage assessor. Examine this image strictly based on what is visibly proven. DO NOT guess how the accident happened. DO NOT assume the orientation of the vehicle. Describe the exact visible damage and severity.",
-          "prompt": "List the visibly damaged parts in detail. Be extremely literal. State if the vehicle is upright. Do not hallucinate missing parts or rollover damage unless explicitly visible."
+          "model": "${ROCKETRIDE_VISION_MODEL}",
+          "modelTotalTokens": 32768,
+          "systemPrompt": "You are a strictly literal, factual insurance damage assessor. Examine ONLY the single image attached to this specific request -- never reference or reuse a description from any other image or prior request. Examine this image strictly based on what is visibly proven. DO NOT guess how the accident happened. DO NOT assume the orientation of the vehicle. Some submitted claims have no real damage at all -- if the vehicle looks intact, say so plainly instead of inventing plausible-sounding damage.",
+          "prompt": "Look only at the image attached to this message. List the visibly damaged parts in detail, but ONLY damage that is clearly and unambiguously visible in THIS image. If the vehicle appears intact with no clear damage, respond exactly with: 'No visible damage detected.' Be extremely literal. State if the vehicle is upright. Do not hallucinate missing parts, rollover damage, or cosmetic wear as if it were collision damage unless explicitly visible. Do not describe any vehicle other than the one shown in this attached image."
         },
         "name": "Ollama Vision",
         "parameters": {}
@@ -116,9 +116,9 @@
       "name": "Claim Analysis Prompt",
       "config": {
         "instructions": [
-          "Analyze this vehicle damage report. Respond with ONLY a valid JSON object, no markdown, no explanation, no preamble. Only describe damage you can clearly see in the description. Do not infer or assume damage that is not mentioned. If something is unclear, say unable to confirm.  POLICY RULES FOR COVERAGE ASSESSMENT: - Collision Coverage: $500 deductible, $50,000 max. Covers collisions with vehicles, objects, poles, trees, guardrails. Excludes: racing, intentional damage, unlicensed drivers. - Comprehensive Coverage: $250 deductible, $50,000 max. Covers theft, vandalism, weather, hail, flood, fire, animal strikes. Excludes: wear and tear, mechanical failure. - Fast Track: Claims under $2,500 after deductible can be auto-approved. - Total Loss: If repair cost exceeds 70% of vehicle value, recommend total loss evaluation.  Use this exact schema: {\"summary\": \"A detailed 3-5 sentence description of the collision and visible damage\", \"severity\": \"Low|Moderate|Severe|Totaled\", \"damaged_parts\": [\"...\"], \"estimated_cost_range\": \"$X - $Y\", \"safety_hazards\": [\"...\"], \"drivable\": true/false, \"confidence\": {\"summary\": 85, \"severity\": 90, \"damaged_parts\": 75, \"estimated_cost_range\": 60, \"drivable\": 80}, \"coverage\": {\"eligible\": true/false, \"type\": \"Collision|Comprehensive|None\", \"deductible\": 500, \"estimated_payout\": 0, \"recommendation\": \"One sentence explaining eligibility and next steps\"}}"
+          "Analyze ONLY the specific vehicle damage report given to you below -- never reuse, echo, or reference any other claim, example, or prior analysis. Respond with ONLY a valid JSON object, no markdown, no explanation, no preamble. Only describe damage you can clearly see in the description. Do not infer or assume damage that is not mentioned. If something is unclear, say unable to confirm.  FRAUD AWARENESS: Some claims are filed with no real damage present. If the visual description states no damage was found, or the described damage is vague, minor cosmetic wear, or cannot be clearly confirmed, you MUST NOT invent a severity, cost estimate, or coverage approval. In that case set severity to \"Unable to Confirm\", damaged_parts to an empty list, estimated_cost_range to \"Pending Mechanic Inspection\", requires_mechanic_inspection to true, and coverage.recommendation to state that a licensed mechanic inspection report is required before the claim can proceed. Only set requires_mechanic_inspection to false when damage is clearly and unambiguously described.  POLICY RULES FOR COVERAGE ASSESSMENT: - Collision Coverage: $500 deductible, $50,000 max. Covers collisions with vehicles, objects, poles, trees, guardrails. Excludes: racing, intentional damage, unlicensed drivers. - Comprehensive Coverage: $250 deductible, $50,000 max. Covers theft, vandalism, weather, hail, flood, fire, animal strikes. Excludes: wear and tear, mechanical failure. - Fast Track: Claims under $2,500 after deductible can be auto-approved. - Total Loss: If repair cost exceeds 70% of vehicle value, recommend total loss evaluation.  The schema below shows FIELD NAMES AND FORMAT ONLY -- every placeholder in angle brackets (<...>) MUST be replaced with content generated fresh from THIS report; never copy a placeholder or any other example text verbatim into your answer. Use this exact schema: {\"summary\": \"<3-5 sentences describing ONLY the collision and damage in this specific report>\", \"severity\": \"Low|Moderate|Severe|Totaled|Unable to Confirm\", \"damaged_parts\": [\"<part>\"], \"estimated_cost_range\": \"$X - $Y\", \"safety_hazards\": [\"<hazard>\"], \"drivable\": true/false, \"confidence\": {\"summary\": 85, \"severity\": 90, \"damaged_parts\": 75, \"estimated_cost_range\": 60, \"drivable\": 80}, \"coverage\": {\"eligible\": true/false, \"type\": \"Collision|Comprehensive|None\", \"deductible\": 500, \"estimated_payout\": 0, \"recommendation\": \"<one sentence specific to this claim>\"}, \"requires_mechanic_inspection\": true/false}"
         ],
-        "prompt": "Analyze this vehicle damage report. Respond with ONLY a valid JSON object, no markdown, no explanation, no preamble. Only describe damage you can clearly see in the description. Do not infer or assume damage that is not mentioned. If something is unclear, say unable to confirm. Use this exact schema:\n{\"summary\": \"A detailed 3-5 sentence description including: what type of collision occurred, which areas of the vehicle are damaged, the visible extent of damage (crushed, cracked, dented, scratched), any visible safety concerns (fluid leaks, deployed airbags, broken glass), and whether the vehicle appears structurally compromised\", \"severity\": \"Low|Moderate|Severe|Totaled\", \"damaged_parts\": [\"...\"], \"estimated_cost_range\": \"$X - $Y\", \"safety_hazards\": [\"...\"], \"drivable\": true/false, \"confidence\": {\"summary\": 85, \"severity\": 90, \"damaged_parts\": 75, \"estimated_cost_range\": 60, \"drivable\": 80}}\n\nHere is the damage report to analyze:\n{input}",
+        "prompt": "Analyze ONLY the specific vehicle damage report given to you below -- never reuse, echo, or reference any other claim, example, or prior analysis. Respond with ONLY a valid JSON object, no markdown, no explanation, no preamble. Only describe damage you can clearly see in the description. Do not infer or assume damage that is not mentioned. If something is unclear, say unable to confirm. FRAUD AWARENESS: some claims are filed with no real damage present -- if no damage is described or it cannot be clearly confirmed, do not invent a severity or cost; set severity to \"Unable to Confirm\", damaged_parts to an empty list, and requires_mechanic_inspection to true. The schema below shows FIELD NAMES AND FORMAT ONLY -- every placeholder in angle brackets (<...>) MUST be replaced with content generated fresh from THIS report; never copy a placeholder verbatim into your answer. Use this exact schema:\n{\"summary\": \"<3-5 sentences describing ONLY this specific report: what type of collision occurred, which areas of the vehicle are damaged, the visible extent of damage (crushed, cracked, dented, scratched), any visible safety concerns (fluid leaks, deployed airbags, broken glass), and whether the vehicle appears structurally compromised>\", \"severity\": \"Low|Moderate|Severe|Totaled|Unable to Confirm\", \"damaged_parts\": [\"<part>\"], \"estimated_cost_range\": \"$X - $Y\", \"safety_hazards\": [\"<hazard>\"], \"drivable\": true/false, \"confidence\": {\"summary\": 85, \"severity\": 90, \"damaged_parts\": 75, \"estimated_cost_range\": 60, \"drivable\": 80}, \"requires_mechanic_inspection\": true/false}\n\nHere is the ONLY damage report you should analyze -- ignore any other content from earlier in this conversation:\n{input}",
         "name": "Claim Analysis Prompt",
         "parameters": {
           "google": {}
@@ -153,57 +153,6 @@
       },
       "ui": {
         "position": {
-          "x": 1400,
-          "y": 600
-        },
-        "nodeType": "default",
-        "formDataValid": true
-      },
-      "control": [
-        {
-          "classType": "llm",
-          "from": "agent_rocketride_1"
-        }
-      ]
-    },
-    {
-      "id": "memory_internal_1",
-      "provider": "memory_internal",
-      "name": "Memory (Internal)",
-      "config": {
-        "type": "memory_internal",
-        "name": "Memory (Internal)"
-      },
-      "ui": {
-        "position": {
-          "x": 1600,
-          "y": 600
-        },
-        "nodeType": "default",
-        "formDataValid": true
-      },
-      "control": [
-        {
-          "classType": "memory",
-          "from": "agent_rocketride_1"
-        }
-      ]
-    },
-    {
-      "id": "agent_rocketride_1",
-      "provider": "agent_rocketride",
-      "name": "RocketRide Wave",
-      "config": {
-        "agent_description": "You are an expert AI insurance claim intake assessor. Analyze accident descriptions and visual assessments to produce structured claim reports.",
-        "instructions": [
-          "Analyze this vehicle damage report. Respond with ONLY a valid JSON object, no markdown, no explanation, no preamble. Only describe damage you can clearly see in the description. Do not infer or assume damage that is not mentioned. If something is unclear, say unable to confirm. Use this exact schema:\n{\"summary\": \"A detailed 3-5 sentence description including: what type of collision occurred, which areas of the vehicle are damaged, the visible extent of damage (crushed, cracked, dented, scratched), any visible safety concerns (fluid leaks, deployed airbags, broken glass), and whether the vehicle appears structurally compromised\", \"severity\": \"Low|Moderate|Severe|Totaled\", \"damaged_parts\": [\"...\"], \"estimated_cost_range\": \"$X - $Y\", \"safety_hazards\": [\"...\"], \"drivable\": true/false, \"confidence\": {\"summary\": 85, \"severity\": 90, \"damaged_parts\": 75, \"estimated_cost_range\": 60, \"drivable\": 80}}"
-        ],
-        "max_waves": 2,
-        "name": "RocketRide Wave",
-        "parameters": {}
-      },
-      "ui": {
-        "position": {
           "x": 1600,
           "y": 400
         },
@@ -222,7 +171,15 @@
       "provider": "guardrails",
       "name": "Guardrails",
       "config": {
-        "name": "Guardrails"
+        "profile": "basic",
+        "basic": {
+          "policy_mode": "warn",
+          "expected_format": "json"
+        },
+        "name": "Guardrails",
+        "parameters": {
+          "google": {}
+        }
       },
       "ui": {
         "position": {
@@ -230,12 +187,12 @@
           "y": 400
         },
         "nodeType": "default",
-        "formDataValid": false
+        "formDataValid": true
       },
       "input": [
         {
           "lane": "answers",
-          "from": "agent_rocketride_1"
+          "from": "llm_ollama_1"
         }
       ]
     },
@@ -318,7 +275,7 @@
     }
   ],
   "version": 1,
-  "docRevision": 142,
+  "docRevision": 149,
   "isLocked": false,
   "snapToGrid": true,
   "snapGridSize": [
