@@ -135,13 +135,30 @@ def audit_claim_logic(claim_data: dict) -> dict:
     # signal (an empty damaged_parts list) as well as the model's own
     # requires_mechanic_inspection flag, so a claim can't slip through fast
     # track / high priority triage without any damage actually described.
-    if requires_mechanic or not damaged_parts:
+    #
+    # These are two distinct cases with two accurate messages -- a model can
+    # set requires_mechanic_inspection even when it DID list damaged parts
+    # (e.g. it's unsure of the full extent), which is different from finding
+    # no damage at all.
+    if not damaged_parts:
         return {
             "triage_level": "MECHANIC INSPECTION REQUIRED",
             "flags": [
                 "INSUFFICIENT EVIDENCE: No damage could be confirmed from the "
                 "photo/description. Claimant must obtain a licensed mechanic's "
                 "inspection report before this claim can proceed."
+            ],
+            "processed_at": time.strftime("%Y-%m-%d %H:%M:%S")
+        }
+    if requires_mechanic:
+        return {
+            "triage_level": "MECHANIC INSPECTION REQUIRED",
+            "flags": [
+                "AI FLAGGED FOR INSPECTION: Damage was identified "
+                f"({', '.join(damaged_parts)}), but the AI could not fully "
+                "confirm the extent of damage from this evidence alone. A "
+                "licensed mechanic's inspection report is required before "
+                "this claim can proceed."
             ],
             "processed_at": time.strftime("%Y-%m-%d %H:%M:%S")
         }

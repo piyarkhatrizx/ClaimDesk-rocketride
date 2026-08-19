@@ -134,6 +134,10 @@ claimdesk-rocketride/
 │   ├── index.html
 │   ├── app.js
 │   └── style.css
+├── test-cases/
+│   ├── case-01/  (rear-end collision, drivable)
+│   ├── case-02/  (tree collision, not drivable)
+│   └── case-03/  (pole collision, not drivable)
 ├── .env.example
 ├── ClaimDesk.py
 ├── serve.py
